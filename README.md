@@ -124,6 +124,46 @@ Opcion 2:
 
 - Ejecutar `run.bat` con doble clic.
 
+## Crear instalador para Windows
+
+TELITA OCR incluye un flujo de build para generar instalador `.exe` con asistente usando **PyInstaller + Inno Setup**.
+
+### Prerequisitos de build
+
+- Entorno virtual del proyecto creado en `venv`
+- Inno Setup 6 instalado (ruta esperada por el script):
+  - `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`
+
+### Generar ejecutable + instalador
+
+Desde la raiz del proyecto:
+
+```powershell
+.\build_installer.bat
+```
+
+El script realiza:
+
+1. Limpieza de `build/`, `dist/` e `installer_output/`.
+2. Instalacion/actualizacion de PyInstaller en el `venv`.
+3. Build del ejecutable con `telita_ocr.spec`.
+4. Compilacion del instalador con `installer/telita_ocr.iss`.
+
+Salida esperada:
+
+- Ejecutable empaquetado en `dist/TelitaOCR/`
+- Instalador final en `installer_output/`
+- Instalador directo: [TELITA_OCR_Installer.exe](installer_output/TELITA_OCR_Installer.exe)
+
+### Aviso obligatorio de dependencias
+
+El instalador muestra un mensaje informando que, ademas de TELITA OCR, debes instalar:
+
+- Tesseract-OCR
+- Ghostscript
+
+La aplicacion tambien vuelve a mostrar este aviso al iniciar si detecta que falta alguna de esas dependencias en PATH.
+
 ## Uso de la aplicacion paso a paso
 
 1. Haz clic en `Seleccionar PDF`.

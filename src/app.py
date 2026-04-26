@@ -4,6 +4,7 @@ import os
 import threading
 import tkinter as tk
 from pathlib import Path
+from shutil import which
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from src.ocr_engine import (
@@ -98,9 +99,11 @@ class OCRApp:
         self.status_var = tk.StringVar(value="Listo para comenzar.")
         self.info_var = tk.StringVar(value="Selecciona un archivo PDF para analizarlo.")
         self.logo_image: tk.PhotoImage | None = self._load_logo_image()
+        self._dependency_notice_shown = False
 
         self._build_menu()
         self._build_ui()
+        self.root.after(150, self._show_missing_dependencies_notice)
 
     def _build_menu(self) -> None:
         menu_bar = tk.Menu(self.root)
@@ -110,6 +113,31 @@ class OCRApp:
         help_menu.add_command(label="Acerca de", command=self.show_about)
         menu_bar.add_cascade(label="Ayuda", menu=help_menu)
         self.root.config(menu=menu_bar)
+
+    def _show_missing_dependencies_notice(self) -> None:
+        if self._dependency_notice_shown:
+            return
+
+        missing_items: list[str] = []
+        if which("tesseract") is None:
+            missing_items.append("Tesseract-OCR")
+        if which("gswin64c") is None and which("gs") is None:
+            missing_items.append("Ghostscript")
+
+        if not missing_items:
+            return
+
+        self._dependency_notice_shown = True
+        dependencies = ", ".join(missing_items)
+        messagebox.showwarning(
+            "Dependencias obligatorias faltantes",
+            "TELITA OCR requiere dependencias del sistema para funcionar.\n\n"
+            f"Faltan: {dependencies}\n\n"
+            "Instala estas herramientas y agrega sus rutas al PATH de Windows:\n"
+            "- Tesseract OCR: https://github.com/UB-Mannheim/tesseract/wiki\n"
+            "- Ghostscript: https://ghostscript.com/releases/gsdnld.html\n\n"
+            "Luego reinicia la aplicacion.",
+        )
 
     def _load_logo_image(self) -> tk.PhotoImage | None:
         logo_path = Path(__file__).resolve().parent.parent / "assets" / "telita-ocr.png"
