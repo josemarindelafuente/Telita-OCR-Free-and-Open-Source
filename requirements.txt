@@ -1,0 +1,7 @@
+ocrmypdf
+pikepdf
+pypdf
+pytesseract
+pypdfium2
+opencv-python
+numpy
