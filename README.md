@@ -154,6 +154,7 @@ Salida esperada:
 - Ejecutable empaquetado en `dist/TelitaOCR/`
 - Instalador final en `installer_output/`
 - Instalador directo: [TELITA_OCR_Installer.exe](installer_output/TELITA_OCR_Installer.exe)
+- Descarga del instalador (Google Drive): [TELITA_OCR_Installer.exe](https://drive.google.com/file/d/1QpZuVSmJmmH4qcVWxJoLYhA0yKBFw8_7/view?usp=sharing)
 
 ### Aviso obligatorio de dependencias
 

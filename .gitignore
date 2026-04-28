@@ -12,8 +12,12 @@ ENV/
 # Build/distribution artifacts
 build/
 dist/
+installer_output/
 *.egg-info/
 .eggs/
+
+# Instaladores de terceros (Tesseract, Ghostscript, etc.) — colocar localmente para compilar el .iss
+third_party/
 
 # Test/coverage/cache tools
 .pytest_cache/

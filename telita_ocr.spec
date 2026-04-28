@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files
+
 
 project_root = Path.cwd()
 assets_dir = project_root / "assets"
@@ -16,8 +18,10 @@ a = Analysis(
     datas=[
         (str(assets_dir), "assets"),
         (str(project_root / "README.md"), "."),
-    ],
-    hiddenimports=[],
+    ]
+    + collect_data_files("ocrmypdf")
+    + collect_data_files("sv_ttk"),
+    hiddenimports=["ocrmypdf.data", "sv_ttk"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

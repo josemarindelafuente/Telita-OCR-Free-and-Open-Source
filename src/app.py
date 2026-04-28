@@ -7,6 +7,8 @@ from pathlib import Path
 from shutil import which
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
+import sv_ttk
+
 from src.ocr_engine import (
     OCREngineError,
     PdfAnalysis,
@@ -28,6 +30,12 @@ ENGINE_OPTIONS = {
     "Rapido (OCRmyPDF)": "principal",
     "Compatibilidad imagenes": "fallback",
 }
+
+FONT_TITLE = ("Segoe UI", 20, "bold")
+FONT_SUBTITLE = ("Segoe UI", 10)
+FONT_UI = ("Segoe UI", 10)
+FONT_UI_BOLD = ("Segoe UI", 10, "bold")
+FONT_LOG = ("Consolas", 9)
 
 HELP_TEXT = """TELITA OCR - Ayuda de configuracion y uso
 
@@ -86,8 +94,10 @@ class OCRApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Telita OCR - Aplicacion de escritorio para OCR de PDFs")
-        self.root.geometry("900x680")
-        self.root.minsize(820, 620)
+        self.root.geometry("1150x860")
+        self.root.minsize(1040, 720)
+
+        sv_ttk.set_theme("light")
 
         self.selected_pdf: Path | None = None
         self.output_pdf: Path | None = None
@@ -97,13 +107,35 @@ class OCRApp:
         self.engine_var = tk.StringVar(value="Automatico (recomendado)")
         self.file_var = tk.StringVar(value="Ningun archivo seleccionado")
         self.status_var = tk.StringVar(value="Listo para comenzar.")
-        self.info_var = tk.StringVar(value="Selecciona un archivo PDF para analizarlo.")
+        self.progress_percent_var = tk.StringVar(value="0%")
+
+        self.var_a_archivo = tk.StringVar(value="—")
+        self.var_a_paginas = tk.StringVar(value="—")
+        self.var_a_tamano = tk.StringVar(value="—")
+        self.var_a_texto = tk.StringVar(value="—")
+        self.var_a_imagenes = tk.StringVar(value="—")
+        self.var_a_cifrado = tk.StringVar(value="—")
+        self.var_a_restricciones = tk.StringVar(value="—")
+        self.var_a_salida = tk.StringVar(value="—")
+
         self.logo_image: tk.PhotoImage | None = self._load_logo_image()
         self._dependency_notice_shown = False
+        self._container: ttk.Frame | None = None
+        self._analysis_value_labels: list[ttk.Label] = []
 
         self._build_menu()
         self._build_ui()
+        self.root.after(0, self._maximize_main_window)
         self.root.after(150, self._show_missing_dependencies_notice)
+
+    def _maximize_main_window(self) -> None:
+        try:
+            self.root.state("zoomed")
+        except tk.TclError:
+            try:
+                self.root.attributes("-zoomed", True)
+            except tk.TclError:
+                pass
 
     def _build_menu(self) -> None:
         menu_bar = tk.Menu(self.root)
@@ -145,7 +177,6 @@ class OCRApp:
             return None
         try:
             image = tk.PhotoImage(file=str(logo_path))
-            # Ajuste automatico para no dominar la interfaz.
             scale = max(1, image.width() // 180)
             if scale > 1:
                 image = image.subsample(scale, scale)
@@ -153,101 +184,224 @@ class OCRApp:
         except tk.TclError:
             return None
 
+    def _sync_theme_button_text(self) -> None:
+        if sv_ttk.get_theme() == "dark":
+            self.theme_button.config(text="Tema: Oscuro")
+        else:
+            self.theme_button.config(text="Tema: Claro")
+
+    def _toggle_theme(self) -> None:
+        sv_ttk.toggle_theme()
+        self._sync_theme_button_text()
+        self._apply_log_widget_theme(self.log_text)
+
+    def _on_container_configure(self, event: tk.Event) -> None:
+        if self._container is None or event.widget is not self._container:
+            return
+        inner = max(220, int(event.width) - 220)
+        for lbl in self._analysis_value_labels:
+            lbl.configure(wraplength=inner)
+
+    def _apply_log_widget_theme(self, widget: tk.Text) -> None:
+        if sv_ttk.get_theme() == "dark":
+            widget.config(
+                bg="#1e1e1e",
+                fg="#d4d4d4",
+                insertbackground="#d4d4d4",
+                highlightthickness=0,
+            )
+        else:
+            widget.config(
+                bg="#ffffff",
+                fg="#1a1a1a",
+                insertbackground="#1a1a1a",
+                highlightthickness=0,
+            )
+
     def _build_ui(self) -> None:
-        container = ttk.Frame(self.root, padding=18)
-        container.pack(fill=tk.BOTH, expand=True)
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
 
+        container = ttk.Frame(self.root, padding=(20, 18))
+        self._container = container
+        container.grid(row=0, column=0, sticky="nsew")
+        container.grid_columnconfigure(0, weight=1)
+        container.grid_rowconfigure(7, weight=1)
+        container.bind("<Configure>", self._on_container_configure, add="+")
+
+        # --- Fila 0: cabecera ---
         header = ttk.Frame(container)
-        header.pack(fill=tk.X, pady=(0, 14))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        header.grid_columnconfigure(1, weight=1)
 
+        logo_frame = ttk.Frame(header)
+        logo_frame.grid(row=0, column=0, sticky="nw", padx=(0, 12))
         if self.logo_image:
-            ttk.Label(header, image=self.logo_image).pack(side=tk.LEFT, padx=(0, 12))
+            ttk.Label(logo_frame, image=self.logo_image).pack(anchor=tk.NW)
 
         title_box = ttk.Frame(header)
-        title_box.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Label(
-            title_box,
-            text="Telita OCR",
-            font=("Segoe UI", 18, "bold"),
-        ).pack(anchor=tk.W)
+        title_box.grid(row=0, column=1, sticky="w")
+        ttk.Label(title_box, text="Telita OCR", font=FONT_TITLE).pack(anchor=tk.W)
         ttk.Label(
             title_box,
             text="Convierte PDFs a documentos buscables con OCR.",
-            font=("Segoe UI", 10),
+            font=FONT_SUBTITLE,
         ).pack(anchor=tk.W, pady=(2, 0))
 
-        top_row = ttk.LabelFrame(container, text="Archivo", padding=10)
-        top_row.pack(fill=tk.X, pady=(0, 10))
+        self.theme_button = ttk.Button(header, text="", width=16, command=self._toggle_theme)
+        self.theme_button.grid(row=0, column=2, sticky="ne", padx=(12, 0))
+        self._sync_theme_button_text()
 
-        ttk.Button(top_row, text="Seleccionar PDF", command=self.select_pdf).pack(side=tk.LEFT)
-        ttk.Label(top_row, textvariable=self.file_var).pack(side=tk.LEFT, padx=10)
+        # --- Fila 1: Archivo ---
+        card_file = ttk.LabelFrame(container, text=" Archivo ", padding=(14, 12))
+        card_file.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        card_file.grid_columnconfigure(1, weight=1)
 
-        settings = ttk.LabelFrame(container, text="Configuracion", padding=10)
-        settings.pack(fill=tk.X, pady=(0, 10))
+        ttk.Button(card_file, text="Seleccionar PDF", command=self.select_pdf).grid(
+            row=0, column=0, sticky="w", padx=(0, 12)
+        )
+        ttk.Label(card_file, textvariable=self.file_var, font=FONT_UI).grid(
+            row=0, column=1, sticky="w"
+        )
 
-        ttk.Label(settings, text="Idioma OCR:").pack(side=tk.LEFT)
+        # --- Fila 2: Configuracion ---
+        card_settings = ttk.LabelFrame(container, text=" Configuracion ", padding=(14, 12))
+        card_settings.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        card_settings.grid_columnconfigure(1, weight=1)
+        card_settings.grid_columnconfigure(3, weight=1)
+
+        ttk.Label(card_settings, text="Idioma OCR", font=FONT_UI_BOLD).grid(
+            row=0, column=0, sticky="w", padx=(0, 8)
+        )
         self.language_combo = ttk.Combobox(
-            settings,
+            card_settings,
             state="readonly",
             textvariable=self.language_var,
             values=list(LANG_OPTIONS.keys()),
-            width=20,
+            width=22,
         )
-        self.language_combo.pack(side=tk.LEFT, padx=10)
+        self.language_combo.grid(row=0, column=1, sticky="ew", padx=(0, 20))
 
-        ttk.Label(settings, text="Modo:").pack(side=tk.LEFT)
+        ttk.Label(card_settings, text="Modo OCR", font=FONT_UI_BOLD).grid(
+            row=0, column=2, sticky="w", padx=(0, 8)
+        )
         self.engine_combo = ttk.Combobox(
-            settings,
+            card_settings,
             state="readonly",
             textvariable=self.engine_var,
             values=list(ENGINE_OPTIONS.keys()),
-            width=26,
+            width=28,
         )
-        self.engine_combo.pack(side=tk.LEFT, padx=10)
+        self.engine_combo.grid(row=0, column=3, sticky="ew")
+
+        # --- Fila 3: Acciones ---
+        card_actions = ttk.LabelFrame(container, text=" Acciones ", padding=(14, 12))
+        card_actions.grid(row=3, column=0, sticky="ew", pady=(0, 10))
+        card_actions.grid_columnconfigure(0, weight=1)
+        card_actions.grid_columnconfigure(1, weight=1)
+        card_actions.grid_columnconfigure(2, weight=1)
 
         self.process_button = ttk.Button(
-            settings,
+            card_actions,
             text="Generar PDF con OCR",
             command=self.start_ocr,
             state=tk.DISABLED,
         )
-        self.process_button.pack(side=tk.LEFT, padx=10)
+        self.process_button.grid(row=0, column=0, sticky="ew", padx=(0, 8))
 
         self.diagnostic_button = ttk.Button(
-            settings,
+            card_actions,
             text="Modo diagnostico",
             command=self.show_diagnostics,
         )
-        self.diagnostic_button.pack(side=tk.LEFT, padx=10)
+        self.diagnostic_button.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
         self.open_folder_button = ttk.Button(
-            settings,
-            text="Abrir carpeta",
+            card_actions,
+            text="Abrir carpeta de salida",
             command=self.open_output_folder,
             state=tk.DISABLED,
         )
-        self.open_folder_button.pack(side=tk.LEFT)
+        self.open_folder_button.grid(row=0, column=2, sticky="ew")
 
-        info = ttk.LabelFrame(container, text="Analisis del archivo", padding=12)
-        info.pack(fill=tk.X, pady=(0, 10))
-        ttk.Label(info, textvariable=self.info_var, justify=tk.LEFT).pack(anchor=tk.W)
+        # --- Fila 4: Analisis ---
+        card_analysis = ttk.LabelFrame(container, text=" Analisis del archivo ", padding=(14, 12))
+        card_analysis.grid(row=4, column=0, sticky="ew", pady=(0, 10))
+        card_analysis.grid_columnconfigure(1, weight=1)
 
-        progress_row = ttk.Frame(container)
-        progress_row.pack(fill=tk.X, pady=(0, 10))
-        self.progress = ttk.Progressbar(progress_row, mode="determinate", maximum=100, value=0)
-        self.progress.pack(fill=tk.X)
+        analysis_rows: list[tuple[str, tk.StringVar]] = [
+            ("Archivo", self.var_a_archivo),
+            ("Paginas", self.var_a_paginas),
+            ("Tamano", self.var_a_tamano),
+            ("Contiene texto", self.var_a_texto),
+            ("Imagenes encontradas", self.var_a_imagenes),
+            ("Cifrado", self.var_a_cifrado),
+            ("Restricciones", self.var_a_restricciones),
+            ("Salida prevista", self.var_a_salida),
+        ]
+        self._analysis_value_labels.clear()
+        for i, (label, var) in enumerate(analysis_rows):
+            ttk.Label(card_analysis, text=f"{label}:", font=FONT_UI_BOLD).grid(
+                row=i, column=0, sticky="nw", padx=(0, 10), pady=3
+            )
+            val_lbl = ttk.Label(card_analysis, textvariable=var, font=FONT_UI, wraplength=720)
+            val_lbl.grid(row=i, column=1, sticky="w", pady=3)
+            self._analysis_value_labels.append(val_lbl)
 
-        ttk.Label(container, textvariable=self.status_var).pack(anchor=tk.W, pady=(0, 8))
+        # --- Fila 5: Progreso ---
+        progress_wrap = ttk.Frame(container)
+        progress_wrap.grid(row=5, column=0, sticky="ew", pady=(0, 6))
+        progress_wrap.grid_columnconfigure(0, weight=1)
 
-        logs_frame = ttk.LabelFrame(container, text="Registro", padding=10)
-        logs_frame.pack(fill=tk.BOTH, expand=True)
-        self.log_text = tk.Text(logs_frame, height=10, wrap=tk.WORD, relief=tk.FLAT)
-        self.log_text.pack(fill=tk.BOTH, expand=True)
+        self.progress = ttk.Progressbar(progress_wrap, mode="determinate", maximum=100, value=0)
+        self.progress.grid(row=0, column=0, sticky="ew", padx=(0, 12))
+
+        ttk.Label(progress_wrap, textvariable=self.progress_percent_var, font=FONT_UI_BOLD, width=5).grid(
+            row=0, column=1, sticky="e"
+        )
+
+        # --- Fila 6: Estado ---
+        ttk.Label(container, textvariable=self.status_var, font=FONT_UI).grid(
+            row=6, column=0, sticky="w", pady=(0, 10)
+        )
+
+        # --- Fila 7: Registro (expande) ---
+        logs_frame = ttk.LabelFrame(container, text=" Registro ", padding=(14, 12))
+        logs_frame.grid(row=7, column=0, sticky="nsew", pady=(0, 0))
+        logs_frame.grid_rowconfigure(0, weight=1)
+        logs_frame.grid_columnconfigure(0, weight=1)
+
+        self.log_text = tk.Text(logs_frame, height=11, wrap=tk.WORD, relief=tk.FLAT, font=FONT_LOG)
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+        self._apply_log_widget_theme(self.log_text)
+
         self.log("Aplicacion iniciada.")
+        self.root.after_idle(self._sync_analysis_wraplength)
+
+    def _sync_analysis_wraplength(self) -> None:
+        if self._container is None:
+            return
+        try:
+            w = self._container.winfo_width()
+        except tk.TclError:
+            return
+        inner = max(220, w - 220)
+        for lbl in self._analysis_value_labels:
+            lbl.configure(wraplength=inner)
 
     def log(self, message: str) -> None:
         self.log_text.insert(tk.END, f"{message}\n")
         self.log_text.see(tk.END)
+
+    def _reset_analysis_display(self) -> None:
+        self.var_a_archivo.set("—")
+        self.var_a_paginas.set("—")
+        self.var_a_tamano.set("—")
+        self.var_a_texto.set("—")
+        self.var_a_imagenes.set("—")
+        self.var_a_cifrado.set("—")
+        self.var_a_restricciones.set("—")
+        self.var_a_salida.set("—")
 
     def select_pdf(self) -> None:
         file_path = filedialog.askopenfilename(
@@ -275,20 +429,16 @@ class OCRApp:
                 if self.analysis.restriction_message
                 else "Ninguna"
             )
-            self.info_var.set(
-                "\n".join(
-                    [
-                        f"Archivo: {self.analysis.path.name}",
-                        f"Paginas: {self.analysis.pages}",
-                        f"Tamano: {self.analysis.size_mb} MB",
-                        f"Contiene texto: {text_status}",
-                        f"Imagenes encontradas: {self.analysis.image_count}",
-                        f"Cifrado: {encrypted_status}",
-                        f"Restricciones: {restriction_status}",
-                        f"Salida: {self.output_pdf.name if self.output_pdf else '-'}",
-                    ]
-                )
-            )
+
+            self.var_a_archivo.set(self.analysis.path.name)
+            self.var_a_paginas.set(str(self.analysis.pages))
+            self.var_a_tamano.set(f"{self.analysis.size_mb} MB")
+            self.var_a_texto.set(text_status)
+            self.var_a_imagenes.set(str(self.analysis.image_count))
+            self.var_a_cifrado.set(encrypted_status)
+            self.var_a_restricciones.set(restriction_status)
+            self.var_a_salida.set(self.output_pdf.name if self.output_pdf else "—")
+
             self.status_var.set("Analisis completado.")
             if self.analysis.can_process_ocr:
                 self.process_button.config(state=tk.NORMAL)
@@ -303,7 +453,9 @@ class OCRApp:
         except OCREngineError as exc:
             self.analysis = None
             self.process_button.config(state=tk.DISABLED)
-            self.info_var.set("No se pudo analizar el PDF.")
+            self._reset_analysis_display()
+            self.var_a_archivo.set("Error al analizar")
+            self.status_var.set("No se pudo analizar el PDF.")
             messagebox.showerror("Error de analisis", str(exc))
             self.log(f"Error de analisis: {exc}")
 
@@ -321,6 +473,7 @@ class OCRApp:
         self.process_button.config(state=tk.DISABLED)
         self.open_folder_button.config(state=tk.DISABLED)
         self.progress.config(value=0)
+        self.progress_percent_var.set("0%")
         self.status_var.set("Procesando OCR... 0%")
         self.log("Iniciando OCR...")
 
@@ -352,10 +505,12 @@ class OCRApp:
     def _update_progress(self, percent: int) -> None:
         bounded = max(0, min(100, int(percent)))
         self.progress.config(value=bounded)
+        self.progress_percent_var.set(f"{bounded}%")
         self.status_var.set(f"Procesando OCR... {bounded}%")
 
     def _on_ocr_success(self, output: Path) -> None:
         self.progress.config(value=100)
+        self.progress_percent_var.set("100%")
         self.status_var.set("OCR finalizado correctamente.")
         self.process_button.config(state=tk.NORMAL)
         self.open_folder_button.config(state=tk.NORMAL)
@@ -364,6 +519,7 @@ class OCRApp:
 
     def _on_ocr_error(self, error_message: str) -> None:
         self.progress.config(value=0)
+        self.progress_percent_var.set("0%")
         self.status_var.set("Error durante el OCR.")
         self.process_button.config(state=tk.NORMAL)
         self.log(f"Error OCR: {error_message}")
@@ -376,20 +532,25 @@ class OCRApp:
         help_window.minsize(680, 500)
         help_window.transient(self.root)
         help_window.grab_set()
+        sv_ttk.set_theme(sv_ttk.get_theme())
 
         frame = ttk.Frame(help_window, padding=12)
         frame.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(frame, text="Guia de configuracion y uso", font=("Segoe UI", 12, "bold")).pack(
-            anchor=tk.W, pady=(0, 8)
+        frame.grid_rowconfigure(1, weight=1)
+        frame.grid_columnconfigure(0, weight=1)
+
+        ttk.Label(frame, text="Guia de configuracion y uso", font=("Segoe UI", 12, "bold")).grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
         )
 
-        help_box = scrolledtext.ScrolledText(frame, wrap=tk.WORD, font=("Segoe UI", 10), height=22)
-        help_box.pack(fill=tk.BOTH, expand=True)
+        help_box = scrolledtext.ScrolledText(frame, wrap=tk.WORD, font=FONT_UI, height=22)
+        help_box.grid(row=1, column=0, sticky="nsew")
+        self._apply_log_widget_theme(help_box)
         help_box.insert(tk.END, HELP_TEXT)
         help_box.config(state=tk.DISABLED)
 
         button_row = ttk.Frame(frame)
-        button_row.pack(fill=tk.X, pady=(10, 0))
+        button_row.grid(row=2, column=0, sticky="e", pady=(10, 0))
         ttk.Button(button_row, text="Cerrar", command=help_window.destroy).pack(side=tk.RIGHT)
 
     def show_about(self) -> None:
@@ -435,4 +596,3 @@ class OCRApp:
             return
         folder = self.output_pdf.parent
         os.startfile(folder)  # type: ignore[attr-defined]
-
